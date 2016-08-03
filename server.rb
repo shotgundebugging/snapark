@@ -1,16 +1,34 @@
 require 'sinatra'
+require 'slack-ruby-client'
+require 'curb'
+require 'faraday'
 
 configure do
-  # SmartFile
-  SMARTFILE_CONFIG['key'] = ENV['SMARTFILE_KEY']
-  SMARTFILE_CONFIG['pass'] = ENV['SMARTFILE_PASS']
+  Slack.configure do |config|
+    config.token = ENV['SLACK_API_TOKEN']
+    fail 'Missing ENV[SLACK_API_TOKEN]!' unless config.token
+  end
 end
 
-get '/' do
-  redirect 'https://snapark.e1.loginrocket.com/'
-end
+post '/p' do
+  c = Curl::Easy.new('https://snapark.smartfile.com/api/2/path/data/snapshot.jpg')
+  c.http_auth_types = :basic
+  c.username = ENV['SMARTFILE_KEY']
+  c.password = ENV['SMARTFILE_PASS']
+  c.perform
 
+  File.open('snapshot.jpg', 'wb') { |f| f.write(c.body_str) }
 
-get '/s' do
-  # send_file ...
+  client = Slack::Web::Client.new
+
+  image_file = Faraday::UploadIO.new('snapshot.jpg', 'image/jpeg')
+
+  client.files_upload(
+    channels: '#office',
+    as_user:  true,
+    file:     image_file,
+    filename: 'snapshot.jpg'
+  )
+
+  return ''
 end
